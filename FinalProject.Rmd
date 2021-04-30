@@ -1,0 +1,124 @@
+---
+title: 'Practical Machine Learning: Final Project'
+output:
+  html_document: 
+    keep_md: yes
+  pdf_document: default
+---
+
+# Executive Summary
+
+This analysis provides an overview of the prediction results of the weightlifting dataset.  The goal was to predict the 20 observations in the test set.
+
+That was done by:
+
+* Preprocessing the data to remove NA's or irrelevant information (like user identification)
+* Splitting the training set into a training and validation set and setting model parameters
+* fitting a random forest model and using it to predict the results
+ 
+ We find that:
+ 
+* Accuracy from Cross Validation was >99.6%
+* Accuracy in our test set was 100%
+* We have a model with very strong predictive results
+
+# Model
+
+This data comes from the Weight Lifting Dataset within the [Human Activity Recognition Project]( http://groupware.les.inf.puc-rio.br/har)
+
+Training data is [available here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv), and the testing data is [provided here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+First, we download the data
+```{r message=FALSE, warning=FALSE }
+library(tidyverse)
+library(readr)
+library(caret)
+training <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+dim(testing);dim(training)
+```
+
+The goal of the project is to predict the "classe" variable, which is the last column in the dataset.
+```{r}
+as.tibble(head(training))
+as.tibble(head(testing))
+```
+
+Many of the columns contain 100% NA's in the test set.  We exclude the columns that have no NA's, as well as the 5x columns as the beginning of the dataset that identify users.
+```{r}
+cols <- colnames(training[,colMeans(is.na(testing))==0])
+cols <- cols[-c(1:5)]
+cols
+
+trainCols <- training[,cols]
+dim(trainCols)
+```
+Next, we split this training set into a training and test set, so that we can have an estimate of out of sample error.
+
+```{r}
+set.seed(13234)
+
+inTrain <- createDataPartition(y = trainCols$classe, p = 0.8, list = FALSE)
+
+trainColsPre <- trainCols[inTrain,]
+trainColsTest <- trainCols[-inTrain,]
+
+dim(trainColsPre); dim(trainColsTest)
+```
+
+
+Next, we set the classe variable as a factor, rather than a character.
+```{r}
+trainColsPre$classe <- as.factor(trainColsPre$classe)
+trainColsTest$classe <- as.factor(trainColsTest$classe)
+```
+
+We then define our training control parameters, to perform a limited number of cross validation iterations to reduce the computational time required.
+```{r}
+fitControl <- trainControl(method = "cv", number = 10)
+```
+
+We then fit our random forest model.  I chose random forest because it tends to be the most accurate model type.  I limited the number of trees to 10 to reduce the processing time for the model
+```{r}
+modfit <- train(classe ~ ., method = "rf", data = trainCols, trControl = fitControl, ntree = 10)
+```
+
+```{r}
+modfit
+```
+Next, we check this model on the test set to get an estimate of out of sample error.
+```{r}
+predtest <- predict(modfit, newdata = trainColsTest)
+pred.acc <- sum(predtest == trainColsTest$classe)/length(trainColsTest$classe)
+pred.acc
+```
+
+Since this has 100% accuracy on the test set, and 99.6% accurracy in the cross validation, we think this is a strong model.
+
+Next we predict on the final test set.
+
+First we make sure the columns match
+```{r}
+cols[55]
+predcols <- cols[-55]
+dim(testing[,predcols])
+```
+
+Next we predict using our model.
+```{r}
+predfit <- predict(modfit, newdata = testing[,predcols])
+```
+
+
+```{r}
+length(predfit)
+predfit
+```
+
+This is our solution.
+
+We can plot the cross validation accuracy to confirm what our calculations showed.
+```{r}
+plot(modfit, which = 1)
+```
+
